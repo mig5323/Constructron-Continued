@@ -1,4 +1,64 @@
 ---------------------------------------------------------------------------------------------------
+Version: 1.1.28
+Date: 2024-09-21
+  Bugfixes:
+    - [pY] Tweaked the pathfinder to work better with extremely large buildings.
+  Changes:
+    - The specific station is only displayed on the cargo job screen if opened from a station. An all stations button will appear to display all stations.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.27
+Date: 2024-09-17
+  Bugfixes:
+    - Fixed an issue that caused the Constructrons not to roam stations when any item could be fulfilled by the network but was already delivered.
+    - Fixed a crash when a Constructron decides to roam during a cargo job and the destination station no longer existed.
+    - Fixed a crash when a player changes a stations cargo request and the station no longer existed.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.26
+Date: 2024-09-14
+  Bugfixes:
+    - Fixed a crash for new saves due to a missing varible initialization.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.25
+Date: 2024-09-14
+  Changes:
+    - [MAJOR] Added Cargo job functionality. Constructrons can now transport items between stations.
+    - Added an all logistics screen to manage logistic request of all Constructrons on the surface.
+    - Constructrons will now only roam if there is no incoming items from robots.
+    - Constructrons will now keep robots in their inventory if there is a queued job.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.24
+Date: 2024-09-02
+  Changes:
+    - Major code restructure.
+    - Settings button "apply to all" now reads as "apply to all surfaces" for clarity reasons.
+  Bugfixes:
+    - Fixed an issue which caused the available Constructron count to be incorrect when jobs were reassigned.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.23
+Date: 2024-08-13
+  Bugfixes:
+    - Fixed a minor issue with the robot activity check.
+    - Fixed a crash when new surfaces are created and a repair job is started on another surface. Properly this time.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.22
+Date: 2024-08-08
+  Bugfixes:
+    - Fixed a crash when new surfaces are created and a repair job is started on another surface.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.21
+Date: 2024-08-02
+  Bugfixes:
+    - Resolved an issue with the previous version migration to fix the repair tool name in some circumstances.
+---------------------------------------------------------------------------------------------------
+Version: 1.1.20
+Date: 2024-08-01
+  Changes:
+    - Added a shortcut to open the Constructron Control Center in addition to the hotkey combination.
+  Bugfixes:
+    - Fixed a crash caused by the repair tool name not being set on newly created surfaces.
+    - Fixed an issue that caused map view not to work when Space Exploration mod was not enabled.
+    - Fixed an issue where what was in the cursor would be deleted when the hotkey was used.
+---------------------------------------------------------------------------------------------------
 Version: 1.1.19
 Date: 2024-07-18
   Bugfixes:

@@ -1,9 +1,11 @@
-local custom_lib = require("script/custom_lib")
+local util_func = require("script/utility_functions")
 local cmd = require("script/command_functions")
 local entity_proc = require("script/entity_processor")
 local job_proc = require("script/job_processor")
 
 local gui_handlers = require("script/ui")
+
+local util = require("util")
 
 --===========================================================================--
 -- Main workers
@@ -53,7 +55,7 @@ local ensure_globals = function()
     global.registered_entities = global.registered_entities or {}
     global.constructron_statuses = global.constructron_statuses or {}
     --
-    global.entity_proc_trigger = global.entity_proc_triggerr or true
+    global.entity_proc_trigger = global.entity_proc_trigger or true
     global.queue_proc_trigger = global.queue_proc_trigger or true
     global.job_proc_trigger = global.job_proc_trigger or true
     --
@@ -70,11 +72,14 @@ local ensure_globals = function()
     global.job_index = global.job_index or 0
     global.jobs = global.jobs or {}
     --
+    global.station_requests = global.station_requests or {}
+    --
     global.construction_index = global.construction_index or 0
     global.deconstruction_index = global.deconstruction_index or 0
     global.upgrade_index = global.upgrade_index or 0
     global.repair_index = global.repair_index or 0
     global.destroy_index = global.destroy_index or 0
+    global.cargo_index = global.cargo_index or 0
     --
     global.construction_entities = global.construction_entities or {}
     global.deconstruction_entities = global.deconstruction_entities or {}
@@ -87,6 +92,7 @@ local ensure_globals = function()
     global.upgrade_queue = global.upgrade_queue or {}
     global.repair_queue = global.repair_queue or {}
     global.destroy_queue = global.destroy_queue or {}
+    global.cargo_queue = global.cargo_queue or {}
     --
     global.constructrons = global.constructrons or {} -- all constructron entities.
     global.service_stations = global.service_stations or {} -- all service stations entities.
@@ -116,7 +122,13 @@ local ensure_globals = function()
             },
             job_ui = {
                 elements = {}
-            }
+            },
+            cargo_ui = {
+                elements = {}
+            },
+            logistics_ui = {
+                elements = {}
+            },
         }
     end
     -- ammo name
@@ -145,7 +157,7 @@ local ensure_globals = function()
             init_robot_name = "construction-robot"
         else
             local valid_robots = game.get_filtered_entity_prototypes{{filter = "type", type = "construction-robot"}}
-            local valid_robot_name = pairs(valid_robots)(nil,nil)
+            local valid_robot_name = util_func.firstoflct(valid_robots)
             init_robot_name = valid_robot_name
         end
     end
@@ -157,7 +169,7 @@ local ensure_globals = function()
             init_repair_tool_name = "repair-pack"
         else
             local valid_repair_tools = game.get_filtered_item_prototypes{{filter = "type", type = "repair-tool"}}
-            local valid_repair_tool_name = pairs(valid_repair_tools)(nil,nil)
+            local valid_repair_tool_name = util_func.firstoflct(valid_repair_tools)
             init_repair_tool_name = valid_repair_tool_name
         end
     end
@@ -190,6 +202,7 @@ local ensure_globals = function()
         global.upgrade_queue[surface_index] = global.upgrade_queue[surface_index] or {}
         global.repair_queue[surface_index] = global.repair_queue[surface_index] or {}
         global.destroy_queue[surface_index] = global.destroy_queue[surface_index] or {}
+        global.cargo_queue[surface_index] = global.cargo_queue[surface_index] or {}
     end
     -- build allowed items cache (this is used to filter out entities that do not have recipes)
     global.allowed_items = {}
@@ -212,6 +225,9 @@ local ensure_globals = function()
             global.allowed_items[entity_name] = true
         end
     end
+    -- allowed_items overrides as item/entities do not match what is mined (this is particularly for cargo jobs)
+    global.allowed_items["raw-fish"] = true
+    global.allowed_items["wood"] = true
     -- build required_items cache (used in add_entities_to_chunks)
     global.items_to_place_cache = {}
     for name, v in pairs(game.entity_prototypes) do
@@ -268,28 +284,37 @@ local ev = defines.events
 
 script.on_event(ev.on_lua_shortcut, function (event)
     local name = event.prototype_name
-    if name ~= "ctron-get-selection-tool" then return end
-    local player = game.get_player(event.player_index)
-    if not player then return end
-    local cursor_stack = player.cursor_stack
-    if not cursor_stack then return end
-    if not cursor_stack.valid_for_read or cursor_stack.name ~= "ctron-selection-tool" then
-        cursor_stack.set_stack({ name = "ctron-selection-tool", count = 1 })
-    elseif cursor_stack.name == "ctron-selection-tool" and not player.gui.screen.ctron_main_frame then
+    if name == "ctron-get-selection-tool" then
+        local player = game.get_player(event.player_index)
+        if not player then return end
+        local cursor_stack = player.cursor_stack
+        if not cursor_stack then return end
+        if not cursor_stack.valid_for_read or cursor_stack.name ~= "ctron-selection-tool" then
+            if not player.clear_cursor() then return end
+            cursor_stack.set_stack({ name = "ctron-selection-tool", count = 1 })
+        elseif cursor_stack.name == "ctron-selection-tool" and not player.gui.screen.ctron_main_frame then
+            player.clear_cursor()
+            gui_handlers.open_main_window(player)
+        end
+    elseif name == "ctron-open-ui" then
+        local player = game.get_player(event.player_index)
+        if not player then return end
         gui_handlers.open_main_window(player)
     end
 end)
 
 script.on_event("ctron-get-selection-tool", function (event)
-    local name = event.input_name or event.prototype_name
+    local name = event.input_name
     if name ~= "ctron-get-selection-tool" then return end
     local player = game.get_player(event.player_index)
     if not player then return end
     local cursor_stack = player.cursor_stack
     if not cursor_stack then return end
     if not cursor_stack.valid_for_read or cursor_stack.name ~= "ctron-selection-tool" then
+        if not player.clear_cursor() then return end
         cursor_stack.set_stack({ name = "ctron-selection-tool", count = 1 })
     elseif cursor_stack.name == "ctron-selection-tool" and not player.gui.screen.ctron_main_frame then
+        player.clear_cursor()
         gui_handlers.open_main_window(player)
     end
 end)
@@ -301,6 +326,7 @@ script.on_event(ev.on_surface_created, function(event)
     global.upgrade_queue[surface_index] = {}
     global.repair_queue[surface_index] = {}
     global.destroy_queue[surface_index] = {}
+    global.cargo_queue[surface_index] = {}
     global.constructrons_count[surface_index] = 0
     global.available_ctron_count[surface_index] = 0
     global.stations_count[surface_index] = 0
@@ -323,8 +349,16 @@ script.on_event(ev.on_surface_created, function(event)
         init_robot_name = "construction-robot"
     else
         local valid_robots = game.get_filtered_entity_prototypes{{filter = "type", type = "construction-robot"}}
-        local valid_robot_name = pairs(valid_robots)(nil,nil)
+        local valid_robot_name = util_func.firstoflct(valid_robots)
         init_robot_name = valid_robot_name
+    end
+    local init_repair_tool_name
+    if game.item_prototypes["repair-pack"] then
+        init_repair_tool_name = "repair-pack"
+    else
+        local valid_repair_tools = game.get_filtered_item_prototypes{{filter = "type", type = "repair-tool"}}
+        local valid_repair_tool_name = util_func.firstoflct(valid_repair_tools)
+        init_repair_tool_name = valid_repair_tool_name
     end
     global.construction_job_toggle[surface_index] = true
     global.rebuild_job_toggle[surface_index] = true
@@ -336,6 +370,7 @@ script.on_event(ev.on_surface_created, function(event)
     global.ammo_count[surface_index] = 0
     global.desired_robot_count[surface_index] = 50
     global.desired_robot_name[surface_index] = init_robot_name
+    global.repair_tool_name[surface_index] = init_repair_tool_name
 end)
 
 script.on_event(ev.on_surface_deleted, function(event)
@@ -345,6 +380,7 @@ script.on_event(ev.on_surface_deleted, function(event)
     global.upgrade_queue[surface_index] = nil
     global.repair_queue[surface_index] = nil
     global.destroy_queue[surface_index] = nil
+    global.cargo_queue[surface_index] = nil
     global.constructrons_count[surface_index] = nil
     global.available_ctron_count[surface_index] = nil
     global.stations_count[surface_index] = nil
@@ -360,11 +396,37 @@ script.on_event(ev.on_surface_deleted, function(event)
     global.ammo_count[surface_index] = nil
     global.desired_robot_count[surface_index] = nil
     global.desired_robot_name[surface_index] = nil
+    global.repair_tool_name[surface_index] = nil
 end)
 
 script.on_nth_tick(10, function()
     for _, pathfinder in pairs(global.custom_pathfinder_requests) do
         pathfinder:findpath()
+    end
+end)
+
+script.on_event(defines.events.on_entity_logistic_slot_changed, function(event)
+    local entity = event.entity
+    local entity_name = entity.name
+    if not (entity_name == "constructron" or entity_name == "constructron-rocket-powered") then
+        return
+    end
+
+    local slot = event.slot_index
+    local logistic_request = entity.get_vehicle_logistic_slot(slot)
+    local unit_number = entity.unit_number
+
+    if logistic_request.name then
+        global.constructron_requests[unit_number]["requests"][slot] = {
+            item_name = logistic_request.name,
+            item_count = logistic_request.min
+        }
+        util_func.update_combinator(global.constructron_requests[unit_number].station, logistic_request.name, logistic_request.min)
+    else
+        local item_request = global.constructron_requests[unit_number]["requests"][slot]
+        if not item_request then return end
+        util_func.update_combinator(global.constructron_requests[unit_number].station, item_request.item_name, (item_request.item_count * -1))
+        global.constructron_requests[unit_number]["requests"][slot] = nil
     end
 end)
 
@@ -544,7 +606,7 @@ commands.add_command(
             if param.player_index ~= nil then
                 player = game.players[param.player_index] --[[@as LuaPlayer]]
             end
-            local params = custom_lib.string_split(param.parameter, " ")
+            local params = util_func.string_split(param.parameter, " ")
             local command = table.remove(params, 1) --[[@as string]]
             if command and ctron_commands[command] then
                 ctron_commands[command](player, params)
