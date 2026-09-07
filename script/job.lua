@@ -334,7 +334,7 @@ function job:move_to_position(position)
         pathfinding_flags = { cache = false, low_priority = false },
         try_again_later = 0,
         path_attempt = 1,
-        max_gap_size = 12
+        max_gap_size = 0
     }
 
     self.path_request_params = path_request_params
@@ -803,7 +803,7 @@ function job:check_roaming_candidate(station, current_items, current_requests)
         for quality, count in pairs(value) do
             local held = (current_items[request_name] and current_items[request_name][quality]) or 0
             local needed_count = count - held
-            if needed_count > 0 and station_logistic_network.can_satisfy_request({name = request_name, quality = quality}, needed_count, true) then
+            if needed_count > 0 and station_logistic_network.can_satisfy_request({name = request_name, quality = quality}, 1, true) then
                 debug_lib.VisualDebugText({"ctron_status.trying_diff_station"}, self.worker, 0, 5)
                 self.sub_state = nil
                 self.station = station
